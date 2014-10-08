@@ -79,12 +79,12 @@ options:
     description:
       - if given, standard output will be parsed using the format given and parsed_stdout will be added to the command output
     required: false
-    choices: [ "csv", "json", "yaml" ]
+    choices: [ "csv", "json", "plist", "yaml" ]
   parse_stderr:
     description:
       - if given, standard error will be parsed using the format given and parsed_stderr will be added to the command output
     required: false
-    choices: [ "csv", "json", "yaml" ]
+    choices: [ "csv", "json", "plist", "yaml" ]
 notes:
     -  If you want to run a command through the shell (say you are using C(<),
        C(>), C(|), etc), you actually want the M(shell) module instead. The
@@ -163,6 +163,37 @@ def check_command(commandline):
     return warnings
 
 
+def key_iterator_for(data):
+    """
+    Get an iterator for list indexes, or dict keys, depending on what is passed
+    in as data
+    """
+    if isinstance(data, dict):
+        return data.keys()
+
+    elif isinstance(data, list):
+        return xrange(0, len(data))
+
+
+def simplify_for_json(data):
+    """
+    Filter data in-place, removing anything that doesn't map directly to a JSON
+    type
+    """
+    if isinstance(data, (dict, list)):
+        for key in key_iterator_for(data):
+            try:
+                simplify_for_json(data[key])
+            except TypeError:
+                del data[key]
+
+    elif isinstance(data, (str, int, float, long)):
+        pass
+
+    else:
+        raise TypeError('Data is not a simple type')
+
+
 def parse_csv_output(output):
     import csv
     return list(csv.reader((output,)))
@@ -171,6 +202,12 @@ def parse_json_output(output):
     import json
     return json.loads(ouput)
 
+def parse_plist_output(output):
+    import plistlib
+    data = plistlib.readPlistFromString(output)
+    simplify_for_json(data)
+    return data
+
 def parse_yaml_output(output):
     import yaml
     return yaml.loads(ouput)
@@ -178,6 +215,7 @@ def parse_yaml_output(output):
 OUTPUT_PARSERS = {
     'csv': parse_csv_output,
     'json': parse_json_output,
+    'plist': parse_plist_output,
     'yaml': parse_yaml_output,
 }
 
