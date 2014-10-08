@@ -75,6 +75,16 @@ options:
       - if command warnings are on in ansible.cfg, do not warn about this particular line if set to no/false.
     required: false
     default: True
+  parse_stdout:
+    description:
+      - if given, standard output will be parsed using the format given and parsed_stdout will be added to the command output
+    required: false
+    choices: [ "csv", "json", "yaml" ]
+  parse_stderr:
+    description:
+      - if given, standard error will be parsed using the format given and parsed_stderr will be added to the command output
+    required: false
+    choices: [ "csv", "json", "yaml" ]
 notes:
     -  If you want to run a command through the shell (say you are using C(<),
        C(>), C(|), etc), you actually want the M(shell) module instead. The
@@ -105,6 +115,8 @@ OPTIONS = {'chdir': None,
            'creates': None,
            'executable': None,
            'NO_LOG': None,
+           'parse_stderr': None,
+           'parse_stdout': None,
            'removes': None,
            'warn': True,
            }
@@ -150,6 +162,24 @@ def check_command(commandline):
         warnings.append("Consider using %s module rather than running %s" % (commands[command], command))
     return warnings
 
+
+def parse_csv_output(output):
+    import csv
+    return list(csv.reader((output,)))
+
+def parse_json_output(output):
+    import json
+    return json.loads(ouput)
+
+def parse_yaml_output(output):
+    import yaml
+    return yaml.loads(ouput)
+
+OUTPUT_PARSERS = {
+    'csv': parse_csv_output,
+    'json': parse_json_output,
+    'yaml': parse_yaml_output,
+}
 
 def main():
 
@@ -217,6 +247,13 @@ def main():
     if err is None:
         err = ''
 
+    extra_parse_kwargs = {}
+    for stream_name, output in (('stdout', out), ('stderr', err)):
+        output_format = module.params['parse_%s' % stream_name]
+        if output_format:
+            extra_parse_kwargs['parsed_%s' % stream_name] = \
+                OUTPUT_PARSERS[output_format](output)
+
     module.exit_json(
         cmd      = args,
         stdout   = out.rstrip("\r\n"),
@@ -226,7 +263,8 @@ def main():
         end      = str(endd),
         delta    = str(delta),
         changed  = True,
-        warnings = warnings
+        warnings = warnings,
+        **extra_parse_kwargs
     )
 
 # import module snippets
